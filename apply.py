@@ -29,9 +29,13 @@ def load_classifier(model_hub_id: str):
     Returns (model, tokenizer).
     """
     # TODO: AutoModelForSequenceClassification.from_pretrained(model_hub_id)
+    model = AutoModelForSequenceClassification.from_pretrained(model_hub_id)
+    
     # TODO: AutoTokenizer.from_pretrained(model_hub_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_hub_id)
+    
     # TODO: return both
-    raise NotImplementedError
+    return model, tokenizer
 
 
 def predict(text: str, model, tokenizer):
@@ -43,12 +47,31 @@ def predict(text: str, model, tokenizer):
     Returns (predicted_label_name, predicted_probability).
     """
     # TODO: tokenize text with truncation, max_length=128, return_tensors="pt"
+    inputs = tokenizer(
+        text, 
+        truncation=True, 
+        max_length=128, 
+        return_tensors="pt"
+    )
+    
     # TODO: forward pass under torch.no_grad()
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+        
     # TODO: softmax the logits along the last dim
+    probabilities = torch.nn.functional.softmax(logits, dim=-1)
+    
     # TODO: get argmax index and the probability at that index
+    max_prob, argmax_idx = torch.max(probabilities, dim=-1)
+    pred_idx = argmax_idx.item()
+    pred_prob = max_prob.item()
+    
     # TODO: convert the index to a label name using model.config.id2label
+    label_name = model.config.id2label[pred_idx]
+    
     # TODO: return (label_name, float(probability))
-    raise NotImplementedError
+    return label_name, float(pred_prob)
 
 
 def apply_to_corpus(csv_path: str, model_hub_id: str, output_path: str) -> None:
@@ -61,11 +84,36 @@ def apply_to_corpus(csv_path: str, model_hub_id: str, output_path: str) -> None:
     text_excerpt is the first 200 characters of the article text.
     """
     # TODO: load model and tokenizer once (do not re-load per row)
+    model, tokenizer = load_classifier(model_hub_id)
+    
     # TODO: read the CSV with pandas
+    df = pd.read_csv(csv_path)
+    
+    results = []
+    
     # TODO: iterate over rows, calling predict() on the `text` column
+    for idx, row in df.iterrows():
+        article_id = row['article_id']
+        text = str(row['text'])
+        
+        # Slicing text to get the first 200 characters for the excerpt
+        text_excerpt = text[:200]
+        
+        # Predict label and probability
+        label_name, prob = predict(text, model, tokenizer)
+        
+        results.append({
+            'article_id': article_id,
+            'text_excerpt': text_excerpt,
+            'predicted_label': label_name,
+            'predicted_probability': prob
+        })
+        
     # TODO: build a DataFrame with the four output columns
+    output_df = pd.DataFrame(results)
+    
     # TODO: write to output_path with index=False
-    raise NotImplementedError
+    output_df.to_csv(output_path, index=False)
 
 
 def main() -> None:
